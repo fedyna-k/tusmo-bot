@@ -1,4 +1,5 @@
 import DICTIONNARY from "./dictionnary.json" assert { type: "json" };
+import * as readline from "readline";
 
 
 /**
@@ -87,6 +88,15 @@ function getBit(number, index, length) {
     return (number >> (length - index - 1)) & 1;
 }
 
+/**
+ * @param {number} index 
+ * @param {number} length 
+ * @returns {number}
+ */
+function getMask(index, length) {
+    return 1 << (length - index - 1);
+}
+
 
 /**
  * @param {string} first_letter 
@@ -102,10 +112,124 @@ function filterWords(first_letter, length, filters) {
 }
 
 
+/**
+ * @param {string} letter 
+ * @param {WordFilter[]} filters 
+ * @returns {number}
+ */
+function getFilterIndex(letter, filters) {
+    for (let i = 0 ; i < filters.length ; i++) {
+        if (filters[i].letter == letter) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+
+/**
+ * @param {string} word
+ * @param {string} mask
+ * @param {WordFilter[]} filters
+ * @returns {WordFilter[]}
+ */
 function updateFilters(word, mask, filters) {
     if (word.length != mask.length) {
         return filters;
     }
 
-    
+    let counts = {};
+
+    for (let i = 0 ; i < word.length ; i++) {
+        // "." tells that letter is not in word
+        if (mask[i] == ".") {
+            let filter_index = getFilterIndex(word[i], filters);
+
+            if (filter_index == -1) {
+                filters.push({
+                    letter: word[i],
+                    count: 0,
+                    isCountFinal: true
+                });
+            } else {
+                filters[filter_index].isCountFinal = true;
+            }
+        }
+
+        // "x" tells that letter is in wrong place
+        if (mask[i] == "x") {
+            let filter_index = getFilterIndex(word[i], filters);
+
+            if (filter_index == -1) {
+                filters.push({
+                    letter: word[i],
+                    masks: {
+                        wrong: getMask(i, word.length),
+                        right: 0
+                    },
+                });
+            } else {
+                filters[filter_index].masks.wrong |= getMask(i, word.length);
+            }
+
+            if (counts[word[i]] == undefined) {
+                counts[word[i]] = 1;
+            } else {
+                counts[word[i]]++;
+            }
+
+            filters.at(filter_index).count = counts[word[i]];
+        }
+
+        // "o" tells that letter is in right place
+        if (mask[i] == "o") {
+            let filter_index = getFilterIndex(word[i], filters);
+
+            if (filter_index == -1) {
+                filters.push({
+                    letter: word[i],
+                    masks: {
+                        right: getMask(i, word.length),
+                        wrong: 0
+                    },
+                });
+            } else {
+                filters[filter_index].masks.right |= getMask(i, word.length);
+            }
+
+            if (counts[word[i]] == undefined) {
+                counts[word[i]] = 1;
+            } else {
+                counts[word[i]]++;
+            }
+
+            filters.at(filter_index).count = counts[word[i]];
+        }
+    }
+
+    return filters;
 }
+
+
+const inputs = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+
+function ask_word(first_letter, length, filters, index=0) {
+    let word = filterWords(first_letter, length, filters)[index];
+
+    inputs.question(`Word "${word}" mask is : `, answer => {
+        if (answer == "") {
+            ask_word(first_letter, length, filters, index + 1);
+        } else if (answer != "ok") {
+            ask_word(first_letter, length, updateFilters(word, answer, filters));
+        } else {
+            process.exit(0);
+        }
+    });
+}
+
+ask_word(process.argv[2], process.argv[3], []);
